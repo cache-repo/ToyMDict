@@ -2,7 +2,11 @@
 一个MDict玩具，简称TMD，用于查询mdx，mdd。
 
 代码：智谱清言
-参考：https://github.com/raymanzhang/mdict，https://bitbucket.org/xwang/mdict-analysis/src
+
+参考：
+1. https://github.com/raymanzhang/mdict
+2. https://bitbucket.org/xwang/mdict-analysis/src
+3. https://github.com/KnIfER/PlainDictionaryAPP
 
 特点：
 1. 支持异体字关联
