@@ -1,6 +1,8 @@
 # ToyMDict
 一个MDict玩具，简称TMD，用于查询mdx，mdd。
 
+缘起：https://forum.freemdict.com/t/topic/43867
+
 代码：智谱清言
 
 参考：
