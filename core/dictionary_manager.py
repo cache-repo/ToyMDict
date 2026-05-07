@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from core.mdx_wrapper import MdxWrapper
 import os
+import json
 
 class DictionaryManager:
     def __init__(self):
@@ -11,12 +12,27 @@ class DictionaryManager:
 
     def _init_variant_handler(self):
         try:
-            from libs.variants import VARIANTS
             from libs.variant_utils import VariantHandler
-            print("首次加载异体字映射表...")
-            self._variant_handler = VariantHandler(VARIANTS)
+            from utils.path_helper import get_app_base_dir
+            base_dir = get_app_base_dir()
+            json_path = os.path.join(base_dir, "variants.json")
+
+            if not os.path.exists(json_path):
+                print(f"[警告] 未找到异体字映射表: {json_path}，异体字搜索将被禁用")
+                return
+
+            with open(json_path, 'r', encoding='utf-8') as f:
+                variants = json.load(f)
+
+            variant_dict = {}
+            for key, val in variants.items():
+                variant_dict[key] = val
+
+            print(f"加载异体字映射表: {json_path} ({len(variant_dict)} 条规则)")
+            self._variant_handler = VariantHandler(variant_dict)
         except Exception as e:
             print(f"加载异体字失败: {e}")
+
 
     def load_mdx(self, path: str) -> bool:
         abs_path = os.path.abspath(path)
