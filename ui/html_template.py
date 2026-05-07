@@ -59,6 +59,7 @@ HTML_TEMPLATE = """
         .remove-btn { color: #dc3545; font-weight: bold; cursor: pointer; padding: 0 5px; font-size: 16px; } 
         .remove-btn:hover { color: #a71d2a; } 
         .dict-excluded span:first-child { color: #999; font-style: italic; } 
+        .dict-summary {font-size: 20px; background: #d3d3d3;}
     </style> 
 </head> 
 <body> 
@@ -320,7 +321,20 @@ HTML_TEMPLATE = """
         function deleteCurrentGroup() { 
             if(confirm('确定删除当前分组？')) pywebview.api.delete_group(); 
         } 
-    </script> 
+        window.addEventListener('message', function(event) {
+            var data = event.data || {};
+            
+            // 处理 entry:// 跳转：收到词条后，填入搜索框并触发搜索
+            if (data.type === 'entry-link' && data.word) {
+                var input = document.getElementById('searchInput');
+                input.value = data.word;
+                input.focus();
+                // 复用现有的搜索逻辑
+                var use_variants = document.getElementById('variantCheck').checked;
+                pywebview.api.search(data.word, use_variants);
+            }
+        }); 
+   </script> 
 </body> 
 </html>
 """

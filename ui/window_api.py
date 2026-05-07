@@ -154,8 +154,14 @@ class WindowApi:
         threading.Thread(target=task, daemon=True).start()
 
     def _build_complete_html(self, raw_html: str, dict_id: str, iframe_index: int) -> str:
-        base_url = f"http://localhost:{self.server.port}"
-        head_content, body_content = MdxResourceResolver.rewrite_html_resources(raw_html, dict_id, base_url)
+        # 与资源服务器 /mdd/{dict_id}/{path:.*} 对齐的 base
+        url_safe_dict_id = safe_url_encode(dict_id)
+        base_url = f"http://localhost:{self.server.port}/mdd/{url_safe_dict_id}/"
+
+        # 不再在前端改写 HTML；由 <base> 改变相对路径的解析基准
+        head_content = f'<base href="{base_url}">'
+        body_content = raw_html  # 原样嵌入即可
+
         resize_script = f'''<script>(function() {{
     var t="dict-iframe-{iframe_index}";
     function s() {{ var h=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight); window.parent.postMessage({{type:'resize',id:t,height:h}},'*'); }}
@@ -163,7 +169,35 @@ class WindowApi:
     else window.attachEvent("onload", function(){{ s(); }});
     window.addEventListener("message", function(e){{ if(e.data==='calcHeight') setTimeout(s,50); }});
 }})();</script>'''
-        return f'''<!DOCTYPE html><html style="font-size: 24px;"><head><meta charset="UTF-8">{head_content}</head><body>{body_content}{resize_script}</body></html>'''
+        
+        entry_script = '''
+<script>
+(function() {
+  // 使用捕获阶段拦截，防止被其他事件覆盖
+  document.addEventListener('click', function(e) {
+    var a = e && e.target && e.target.closest('a');
+    if (!a) return;
+    var href = (a.getAttribute('href') || '').trim();
+    if (href.toLowerCase().startsWith('entry://')) {
+      e.preventDefault();
+      e.stopPropagation();
+      // 提取词条名并解码
+      var word = decodeURIComponent(href.substring(8));
+      // 去掉可能存在的锚点 (如 entry://word#anchor)
+      if (word.indexOf('#') !== -1) {
+        word = word.split('#')[0];
+      }
+      if (word) {
+        // 发送消息给主窗口
+        window.parent.postMessage({ type: 'entry-link', word: word }, '*');
+      }
+    }
+  }, true);
+})();
+</script>
+'''
+
+        return f'''<!DOCTYPE html><html style="font-size: 24px;"><head><meta charset="UTF-8">{head_content}</head><body>{body_content}{resize_script}{entry_script}</body></html>'''
 
     # ==================== 分组管理界面 ====================
     def init_group_view(self):
@@ -306,3 +340,4 @@ class WindowApi:
             info_str = (f"<p><b>词典ID:</b> <code>{html_module.escape(dict_id)}</code></p>"
                         f"<p><b>文件路径:</b> <code>{html_module.escape(target.get('id', '未知'))}</code></p>")
             self.window.evaluate_js(f"showDictInfoModal({json.dumps(title, ensure_ascii=False)}, {json.dumps(info_str, ensure_ascii=False)})")
+            
