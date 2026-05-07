@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 from urllib.parse import quote, unquote
 
 def safe_url_encode(path: str) -> str:
@@ -29,3 +30,12 @@ def find_mdx_files(folder_path: str) -> list:
             if f.lower().endswith('.mdx'):
                 mdx_files.append(os.path.join(root, f))
     return mdx_files
+
+def get_app_base_dir() -> str:
+    """获取应用基础目录（开发时为项目根目录，打包后为 exe 所在目录）"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包后：exe 所在目录
+        return os.path.dirname(sys.executable)
+    else:
+        # 开发环境：向上两级（从 utils/ → 根目录）
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
