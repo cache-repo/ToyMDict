@@ -16,7 +16,7 @@ def main():
 
     # 创建窗口
     window = webview.create_window(
-        title="高级词典浏览器 - 分组与多词典支持",
+        title="ToyMDict",
         html=HTML_TEMPLATE,
         width=1100,
         height=750,
