@@ -116,7 +116,6 @@ class WindowApi:
         if not current_group:
             self.window.evaluate_js('updateResults([])')
             return
-
         allowed_ids = set(os.path.abspath(p) for p in self.config.get("groups", {}).get(current_group, []))
         if not allowed_ids:
             self.window.evaluate_js('updateResults([])')
@@ -128,12 +127,12 @@ class WindowApi:
             for r in results:
                 valid_sources = [s for s in r.get("sources", []) if os.path.abspath(s["dict_id"]) in allowed_ids]
                 if valid_sources:
+                    # 此时 valid_sources 里面已经包含了 idx 信息
                     filtered_results.append({"key": r["key"], "sources": valid_sources})
             self._current_results = filtered_results
             self.window.evaluate_js(f"updateResults({json.dumps(filtered_results, ensure_ascii=False)})")
         threading.Thread(target=task, daemon=True).start()
 
-    # ==================== 内容显示 ====================
     def show_entry(self, index: int):
         if index < 0 or index >= len(self._current_results):
             return
@@ -144,7 +143,8 @@ class WindowApi:
         def task():
             render_list = []
             for i, source in enumerate(sources):
-                raw_html, _ = self.manager.get_content(source["dict_id"], key)
+                idx = source.get("idx")  # 修改：获取精确的 idx
+                raw_html, _ = self.manager.get_content(source["dict_id"], key, idx)  # 修改：传递 idx
                 if not raw_html:
                     continue
                 safe_html = self._build_complete_html(raw_html, source["dict_id"], i)
@@ -152,7 +152,7 @@ class WindowApi:
             if render_list:
                 self.window.evaluate_js(f"setContent({json.dumps(render_list, ensure_ascii=False)})")
         threading.Thread(target=task, daemon=True).start()
-
+        
     def _build_complete_html(self, raw_html: str, dict_id: str, iframe_index: int) -> str:
         # 与资源服务器 /mdd/{dict_id}/{path:.*} 对齐的 base
         url_safe_dict_id = safe_url_encode(dict_id)
