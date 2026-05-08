@@ -630,10 +630,10 @@ class CachedMDX:
                     break
         return results
 
+
     def get_by_index(self, abs_idx):
         if self._key_blocks_meta and self._key_blocks_meta[0].get("fallback"):
             return next(itertools.islice(self.base_mdx.items(), abs_idx, abs_idx + 1), (None, None))[1]
-
         with self._file_lock:
             accumulated = 0
             for i, meta in enumerate(self._key_blocks_meta):
@@ -641,7 +641,7 @@ class CachedMDX:
                     keys_block = self._get_key_block(i)
                     local_idx = abs_idx - accumulated
                     record_start_offset = keys_block[local_idx][0]
-
+                    
                     rec_accumulated = 0
                     target_rb_idx = len(self._record_blocks_meta) - 1
                     for j, rb_meta in enumerate(self._record_blocks_meta):
@@ -649,17 +649,35 @@ class CachedMDX:
                             target_rb_idx = j
                             break
                         rec_accumulated += rb_meta["decomp"]
-
+                    
                     rec_block = self._get_record_block(target_rb_idx)
                     rb_start_offset = sum(m["decomp"] for m in self._record_blocks_meta[:target_rb_idx])
-                    end_offset = rb_start_offset + len(rec_block)
+                    rb_end_offset = rb_start_offset + len(rec_block)
+                    
+                    # 【修复】：精准计算 end_offset，解决“加载下一区块内容”的问题
                     if local_idx + 1 < len(keys_block):
+                        # 下一个词条在同一个 key_block 中
                         end_offset = keys_block[local_idx + 1][0]
+                    else:
+                        # 当前词条是 key_block 的最后一条，需要去下一个 key_block 找下一个词条的起始偏移
+                        end_offset = rb_end_offset
+                        for next_i in range(i + 1, len(self._key_blocks_meta)):
+                            next_keys_block = self._get_key_block(next_i)
+                            if next_keys_block:
+                                next_start = next_keys_block[0][0]
+                                # 如果下一个词条的起始偏移还在当前 record_block 内，则用它作为结束边界
+                                if next_start < rb_end_offset:
+                                    end_offset = next_start
+                                break
+                    
+                    # 安全保底：绝不能超过 record_block 的物理边界
+                    if end_offset > rb_end_offset:
+                        end_offset = rb_end_offset
 
                     data = rec_block[record_start_offset - rb_start_offset: end_offset - rb_start_offset]
                     return self.base_mdx._treat_record_data(data)
                 accumulated += meta["count"]
-        return None
+            return None
 
     def close(self):
         self._record_cache.clear()
