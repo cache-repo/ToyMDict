@@ -68,11 +68,11 @@ class DictionaryManager:
         results.sort(key=lambda x: len(x["key"]))
         return results
 
-    def get_content(self, dict_id: str, key: str) -> tuple:
+    def get_content(self, dict_id: str, key: str, idx: int = None) -> tuple:
         abs_path = os.path.abspath(dict_id)
         wrapper = self.loaded_dicts.get(abs_path)
         if not wrapper: return "", ""
-        return wrapper.get_content(key), wrapper.name
+        return wrapper.get_content(key, idx), wrapper.name
 
     def get_resource(self, dict_id: str, path: str) -> bytes:
         abs_path = os.path.abspath(dict_id)

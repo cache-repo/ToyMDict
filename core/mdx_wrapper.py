@@ -37,6 +37,7 @@ class MdxWrapper:
     def search(self, keyword: str, use_variants: bool) -> list:
         if not self.loaded or not keyword:
             return []
+        self._entry_cache.clear()
         results = []
         seen_idx = set()  # 修改：使用 idx 去重，避免异体字搜索重复返回同一词条
         for key, idx in self.mdx.search_prefix(keyword, max_results=50):

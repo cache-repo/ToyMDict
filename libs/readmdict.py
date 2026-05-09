@@ -498,12 +498,75 @@ class CachedMDX:
         except Exception:
             pass
 
+    def _build_v3_index(self, m):
+        f = open(self.fname, 'rb')
+        f.seek(m._key_block_offset)
+        key_data_offset = None
+        record_block_offset = None
+        while True:
+            block_type = m._read_int32(f)
+            block_size = m._read_number(f)
+            block_offset = f.tell()
+            if block_type == 0x01000000:
+                record_block_offset = block_offset
+            elif block_type == 0x03000000:
+                key_data_offset = block_offset
+            f.seek(block_size, 1)
+            if f.read(4):
+                f.seek(-4, 1)
+            else:
+                break
+        f.close()
+
+        if key_data_offset is not None:
+            f = open(self.fname, 'rb')
+            f.seek(key_data_offset)
+            num_kb = m._read_int32(f)
+            _total_size = m._read_number(f)
+            total_count = 0
+            for i in range(num_kb):
+                decomp_size = m._read_int32(f)
+                comp_size = m._read_int32(f)
+                data_start = f.tell()
+                kb_compressed = f.read(comp_size)
+                kb_data = m._decode_block(kb_compressed, decomp_size)
+                keys_in_block = m._split_key_block(kb_data)
+                count = len(keys_in_block)
+                total_count += count
+                if keys_in_block:
+                    self._key_blocks_meta.append({
+                        "first": keys_in_block[0][1].decode('utf-8', errors='ignore'),
+                        "last": keys_in_block[-1][1].decode('utf-8', errors='ignore'),
+                        "count": count,
+                        "offset": data_start,
+                        "comp": comp_size,
+                        "decomp": decomp_size
+                    })
+            m._num_entries = total_count
+            f.close()
+
+        if record_block_offset is not None:
+            f = open(self.fname, 'rb')
+            f.seek(record_block_offset)
+            num_rb = m._read_int32(f)
+            _total_size = m._read_number(f)
+            for i in range(num_rb):
+                decomp_size = m._read_int32(f)
+                comp_size = m._read_int32(f)
+                data_start = f.tell()
+                self._record_blocks_meta.append({
+                    "offset": data_start,
+                    "comp": comp_size,
+                    "decomp": decomp_size
+                })
+                f.seek(comp_size, 1)
+            f.close()
+
     def _build_index(self):
         with self._file_lock:
             m = self.base_mdx
             if m._version >= 3:
-                self.base_mdx = MDX(self.fname)
-                self._key_blocks_meta = [{"fallback": True}]
+                self._build_v3_index(m)
                 return
 
             f = open(self.fname, 'rb')
@@ -602,14 +665,6 @@ class CachedMDX:
             return block_data
 
     def search_prefix(self, prefix, max_results=100):
-        if self._key_blocks_meta and self._key_blocks_meta[0].get("fallback"):
-            keys = list(self.base_mdx.keys())
-            start = bisect_left(keys, prefix.encode(self.encoding))
-            return [(keys[i].decode('utf-8', errors='ignore'), i)
-                    for i in range(start, len(keys))
-                    if keys[i].decode('utf-8', errors='ignore').startswith(prefix)
-                    ][:max_results]
-
         results = []
         prefix_lower = prefix.lower()
         for idx, meta in enumerate(self._key_blocks_meta):
@@ -620,7 +675,6 @@ class CachedMDX:
             keys_block = self._get_key_block(idx)
             base_abs_idx = sum(m["count"] for m in self._key_blocks_meta[:idx])
             for local_idx, (rec_offset, key_bytes) in enumerate(keys_block):
-                # 【修复】_split_key_block 输出的是 utf-8 bytes，必须用 utf-8 解码
                 key_str = key_bytes.decode('utf-8', errors='ignore')
                 if key_str.lower().startswith(prefix_lower):
                     results.append((key_str, base_abs_idx + local_idx))
@@ -632,8 +686,6 @@ class CachedMDX:
 
 
     def get_by_index(self, abs_idx):
-        if self._key_blocks_meta and self._key_blocks_meta[0].get("fallback"):
-            return next(itertools.islice(self.base_mdx.items(), abs_idx, abs_idx + 1), (None, None))[1]
         with self._file_lock:
             accumulated = 0
             for i, meta in enumerate(self._key_blocks_meta):
