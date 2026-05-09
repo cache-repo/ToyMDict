@@ -39,8 +39,9 @@ class WindowApi:
     def _init_system(self):
         def task():
             self._load_config()
-            for g_name, dict_list in self.config.get("groups", {}).items():
-                for p in dict_list:
+            current_group = self.config.get("current_group", "")
+            if current_group:
+                for p in self.config.get("groups", {}).get(current_group, []):
                     self.manager.load_mdx(p)
             self._refresh_ui()
         threading.Thread(target=task, daemon=True).start()
@@ -106,10 +107,12 @@ class WindowApi:
         self._refresh_ui()
         self.init_group_view()
         if group_name:
-            def load_task():
+            new_group_paths = {os.path.abspath(p) for p in self.config.get("groups", {}).get(group_name, [])}
+            def switch_task():
+                self.manager.unload_all_except(new_group_paths)
                 for p in self.config.get("groups", {}).get(group_name, []):
                     self.manager.load_mdx(p)
-            threading.Thread(target=load_task, daemon=True).start()
+            threading.Thread(target=switch_task, daemon=True).start()
 
     def search(self, keyword: str, use_variants: bool):
         current_group = self.config.get("current_group", "")

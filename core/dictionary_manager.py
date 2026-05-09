@@ -38,11 +38,13 @@ class DictionaryManager:
         abs_path = os.path.abspath(path)
         if abs_path in self.loaded_dicts or not os.path.exists(abs_path):
             return abs_path in self.loaded_dicts
-            
+
         wrapper = MdxWrapper(abs_path)
-        # 直接传入已经初始化好的单例
         if wrapper.load(variant_handler=self._variant_handler):
             self.loaded_dicts[abs_path] = wrapper
+            version = getattr(wrapper.mdx, 'base_mdx', None)
+            ver_str = f"v{version._version}" if version is not None else "unknown"
+            print(f"[加载词典] {os.path.basename(abs_path)} (MDX {ver_str})")
             return True
         return False
 
@@ -51,6 +53,11 @@ class DictionaryManager:
         if abs_path in self.loaded_dicts:
             self.loaded_dicts[abs_path].close()
             del self.loaded_dicts[abs_path]
+
+    def unload_all_except(self, keep_paths: set):
+        to_unload = [p for p in self.loaded_dicts if p not in keep_paths]
+        for p in to_unload:
+            self.unload_mdx(p)
 
     def search(self, keyword: str, use_variants: bool) -> list:
         if not self.loaded_dicts or not keyword: return []
