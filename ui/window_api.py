@@ -39,8 +39,9 @@ class WindowApi:
     def _init_system(self):
         def task():
             self._load_config()
-            for g_name, dict_list in self.config.get("groups", {}).items():
-                for p in dict_list:
+            current_group = self.config.get("current_group", "")
+            if current_group:
+                for p in self.config.get("groups", {}).get(current_group, []):
                     self.manager.load_mdx(p)
             self._refresh_ui()
         threading.Thread(target=task, daemon=True).start()
@@ -106,10 +107,29 @@ class WindowApi:
         self._refresh_ui()
         self.init_group_view()
         if group_name:
-            def load_task():
+            new_group_paths = {os.path.abspath(p) for p in self.config.get("groups", {}).get(group_name, [])}
+            def switch_task():
+                self.manager.unload_all_except(new_group_paths)
                 for p in self.config.get("groups", {}).get(group_name, []):
                     self.manager.load_mdx(p)
-            threading.Thread(target=load_task, daemon=True).start()
+                self._auto_search_after_switch()
+            threading.Thread(target=switch_task, daemon=True).start()
+
+    def _auto_search_after_switch(self):
+        try:
+            js_code = """
+            (function() {
+                var input = document.getElementById('searchInput');
+                var keyword = input ? input.value.trim() : '';
+                if (keyword) {
+                    var use_variants = document.getElementById('variantCheck').checked;
+                    pywebview.api.search(keyword, use_variants);
+                }
+            })()
+            """
+            self.window.evaluate_js(js_code)
+        except Exception as e:
+            print(f"[DEBUG] 自动搜索失败: {e}")
 
     def search(self, keyword: str, use_variants: bool):
         current_group = self.config.get("current_group", "")
@@ -127,10 +147,11 @@ class WindowApi:
             for r in results:
                 valid_sources = [s for s in r.get("sources", []) if os.path.abspath(s["dict_id"]) in allowed_ids]
                 if valid_sources:
-                    # 此时 valid_sources 里面已经包含了 idx 信息
                     filtered_results.append({"key": r["key"], "sources": valid_sources})
             self._current_results = filtered_results
             self.window.evaluate_js(f"updateResults({json.dumps(filtered_results, ensure_ascii=False)})")
+            if filtered_results:
+                self.show_entry(0)
         threading.Thread(target=task, daemon=True).start()
 
     def show_entry(self, index: int):

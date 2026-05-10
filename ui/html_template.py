@@ -8,16 +8,26 @@ HTML_TEMPLATE = """
         body { display: flex; flex-direction: column; height: 100vh; background: #f0f2f5; } 
         .toolbar { display: flex; align-items: center; padding: 8px 15px; background: #fff; border-bottom: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05); z-index: 10; } 
         .menu-container { position: relative; margin-right: 20px; } 
-        .menu-btn { padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; } 
-        .menu-btn:hover { background: #45a049; } 
-        .dropdown { display: none; position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; z-index: 100; } 
-        .dropdown.show { display: block; } 
-        .dropdown-item { padding: 10px 15px; cursor: pointer; font-size: 14px; color: #333; } 
-        .dropdown-item:hover { background: #f5f5f5; } 
-        .group-selector { margin-right: 20px; } 
-        .group-selector select { padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; outline: none;} 
-        .search-box { flex: 1; display: flex; align-items: center; background: #f5f5f5; border-radius: 20px; padding: 0 15px; max-width: 500px; } 
-        .search-box input { flex: 1; border: none; background: transparent; padding: 8px 5px; font-size: 14px; outline: none; } 
+        .menu-btn { padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 18px; cursor: pointer; font-size: 14px; height: 36px; line-height: 1; transition: all 0.2s ease; }
+        .menu-btn:hover { background: #45a049; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+        .menu-btn:active { transform: translateY(1px); }
+        .dropdown { display: none; position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); min-width: 150px; z-index: 100; margin-top: 4px; }
+        .dropdown.show { display: block; }
+        .dropdown-item { padding: 10px 15px; cursor: pointer; font-size: 14px; color: #333; transition: background 0.15s; }
+        .dropdown-item:hover { background: #f5f5f5; }
+        .group-selector { margin-right: 20px; display: flex; align-items: center; background: #2196F3; border-radius: 20px; overflow: hidden; height: 36px; border: none; box-shadow: 0 1px 3px rgba(33,150,243,0.2); }
+        .group-label { padding: 8px 14px; color: #2196F3; font-size: 14px; cursor: pointer; background: white; height: 100%; display: flex; align-items: center; justify-content: center; transition: all 0.2s; user-select: none; font-weight: 500; border: 3px solid #2196F3; border-radius: 17px; margin: 1.5px; }
+        .group-label:hover { background: #f8f9fa; color: #1976D2; }
+        .group-selector select { padding: 4px 24px 4px 8px; border: none; font-size: 13px; outline: none; height: 100%; cursor: pointer; background: transparent; color: white; min-width: 70px; appearance: none; text-align: center; text-align-last: center; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 4px center; background-size: 12px; }
+        .group-selector select option { background: #fff; color: #333; }
+        .group-selector:hover { background: #1976D2; box-shadow: 0 2px 6px rgba(33,150,243,0.35); }
+        .search-box { flex: 1; display: flex; align-items: center; background: #f5f5f5; border-radius: 20px; padding: 0 12px; border: 1px solid #e0e0e0; transition: all 0.2s ease; }
+        .search-box:hover, .search-box:focus-within { background: #fff; border-color: #4CAF50; box-shadow: 0 0 0 3px rgba(76,175,80,0.1); }
+        .search-box input { flex: 1; border: none; background: transparent; padding: 10px 8px; font-size: 14px; outline: none; color: #333; }
+        .search-box input::placeholder { color: #999; }
+        .search-btn { padding: 6px 14px; margin-left: 4px; background: linear-gradient(135deg, #4CAF50, #45a049); color: white; border: none; border-radius: 16px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap; transition: all 0.2s ease; display: flex; align-items: center; gap: 5px; height: 32px; }
+        .search-btn:hover { background: linear-gradient(135deg, #45a049, #3d8b40); box-shadow: 0 2px 6px rgba(76,175,80,0.35); transform: translateY(-1px); }
+        .search-btn:active { transform: translateY(0); }
         .variant-check { display: flex; align-items: center; margin-right: 15px; font-size: 13px; color: #555; cursor: pointer; white-space: nowrap; } 
         .variant-check input { margin-right: 5px; } 
         .main-container { display: flex; flex: 1; overflow: hidden; } 
@@ -71,14 +81,17 @@ HTML_TEMPLATE = """
                 <div class="dropdown-item" onclick="pywebview.api.open_folder()">打开文件夹</div> 
             </div> 
         </div> 
-        <button class="menu-btn" style="background: #2196F3;" onclick="showGroupView()">词典分组</button> 
-        <select class="group-selector" id="groupSelect" onchange="pywebview.api.switch_group(this.value)"></select> 
+                <div class="group-selector">
+            <span class="group-label" onclick="showGroupView()">词典分组</span>
+            <select id="groupSelect" onchange="pywebview.api.switch_group(this.value)"></select>
+        </div> 
         <label class="variant-check"> 
             <input type="checkbox" id="variantCheck" checked> 异体字搜索 
         </label> 
-        <div class="search-box"> 
-            <input type="text" id="searchInput" placeholder="请先在上方选择分组，再输入关键词搜索..." onkeyup="handleSearch(event)"> 
-        </div> 
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="请先在上方选择分组，再输入关键词搜索..." onkeyup="handleSearch(event)">
+            <button class="search-btn" onclick="triggerSearch()" title="搜索">🔍</button>
+        </div>
     </div> 
     <div class="main-container"> 
         <div class="sidebar"> 
@@ -137,13 +150,16 @@ HTML_TEMPLATE = """
         document.addEventListener('click', (e) => { 
             if (!e.target.closest('.menu-container')) document.querySelectorAll('.dropdown').forEach(el => el.classList.remove('show')); 
         }); 
-        function handleSearch(e) { 
-            if (e.key === 'Enter') { 
-                const keyword = document.getElementById('searchInput').value.trim(); 
-                const use_variants = document.getElementById('variantCheck').checked; 
-                if(keyword) pywebview.api.search(keyword, use_variants); 
-            } 
-        } 
+        function handleSearch(e) {
+            if (e.key === 'Enter') {
+                triggerSearch();
+            }
+        }
+        function triggerSearch() {
+            const keyword = document.getElementById('searchInput').value.trim();
+            const use_variants = document.getElementById('variantCheck').checked;
+            if(keyword) pywebview.api.search(keyword, use_variants);
+        }
         function updateUI(data) { 
             const optHtml = data.groups.map(g => `<option value="${g.name}"${g.name === data.current ? 'selected' : ''}>${g.name}</option>`).join(''); 
             document.getElementById('groupSelect').innerHTML = optHtml; 

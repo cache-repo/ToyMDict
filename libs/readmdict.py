@@ -225,13 +225,12 @@ class MDict(object):
         return key_list
 
     def _read_header(self):
-        f = open(self._fname, 'rb')
-        header_bytes_size = unpack('>I', f.read(4))[0]
-        header_bytes = f.read(header_bytes_size)
-        adler32 = unpack('<I', f.read(4))[0]
-        assert(adler32 == zlib.adler32(header_bytes) & 0xffffffff)
-        self._key_block_offset = f.tell()
-        f.close()
+        with open(self._fname, 'rb') as f:
+            header_bytes_size = unpack('>I', f.read(4))[0]
+            header_bytes = f.read(header_bytes_size)
+            adler32 = unpack('<I', f.read(4))[0]
+            assert(adler32 == zlib.adler32(header_bytes) & 0xffffffff)
+            self._key_block_offset = f.tell()
         
         if header_bytes[-2:] == b'\x00\x00': header_text = header_bytes[:-2].decode('utf-16').encode('utf-8')
         else: header_text = header_bytes[:-1]
@@ -267,79 +266,79 @@ class MDict(object):
             else: return self._read_keys_v1v2()
 
     def _read_keys_v3(self):
-        f = open(self._fname, 'rb')
-        f.seek(self._key_block_offset)
-        while True:
-            block_type = self._read_int32(f)
-            block_size = self._read_number(f)
-            block_offset = f.tell()
-            if block_type == 0x01000000: self._record_block_offset = block_offset
-            elif block_type == 0x02000000: self._record_index_offset = block_offset
-            elif block_type == 0x03000000: self._key_data_offset = block_offset
-            elif block_type == 0x04000000: self._key_index_offset = block_offset
-            else: raise RuntimeError("Unknown block type %d" % block_type)
-            f.seek(block_size, 1)
-            if f.read(4): f.seek(-4, 1)
-            else: break
-        f.seek(self._key_data_offset)
-        number = self._read_int32(f)
-        total_size = self._read_number(f)
-        key_list = []
-        for i in range(number):
-            decompressed_size = self._read_int32(f)
-            compressed_size = self._read_int32(f)
-            block_data = f.read(compressed_size)
-            decompressed_block_data = self._decode_block(block_data, decompressed_size)
-            key_list.extend(self._split_key_block(decompressed_block_data))
-        f.close()
+        with open(self._fname, 'rb') as f:
+            f.seek(self._key_block_offset)
+            while True:
+                block_type = self._read_int32(f)
+                block_size = self._read_number(f)
+                block_offset = f.tell()
+                if block_type == 0x01000000: self._record_block_offset = block_offset
+                elif block_type == 0x02000000: self._record_index_offset = block_offset
+                elif block_type == 0x03000000: self._key_data_offset = block_offset
+                elif block_type == 0x04000000: self._key_index_offset = block_offset
+                else: raise RuntimeError("Unknown block type %d" % block_type)
+                f.seek(block_size, 1)
+                if f.read(4): f.seek(-4, 1)
+                else: break
+            f.seek(self._key_data_offset)
+            number = self._read_int32(f)
+            total_size = self._read_number(f)
+            key_list = []
+            for i in range(number):
+                decompressed_size = self._read_int32(f)
+                compressed_size = self._read_int32(f)
+                block_data = f.read(compressed_size)
+                decompressed_block_data = self._decode_block(block_data, decompressed_size)
+                key_list.extend(self._split_key_block(decompressed_block_data))
         self._num_entries = len(key_list)
         return key_list
 
     def _read_keys_v1v2(self):
-        f = open(self._fname, 'rb')
-        f.seek(self._key_block_offset)
-        num_bytes = 8 * 5 if self._version >= 2.0 else 4 * 4
-        block = f.read(num_bytes)
-        if self._encrypt & 1: block = _salsa_decrypt(block, self._encrypted_key)
-        sf = BytesIO(block)
-        num_key_blocks = self._read_number(sf)
-        self._num_entries = self._read_number(sf)
-        if self._version >= 2.0:
-            key_block_info_decomp_size = self._read_number(sf)
-            key_block_info_size = self._read_number(sf)
-            key_block_size = self._read_number(sf)
-            f.read(4)
-        else:
-            key_block_info_size = self._read_number(sf)
-            key_block_size = self._read_number(sf)
-        key_block_info = f.read(key_block_info_size)
-        key_block_info_list = self._decode_key_block_info(key_block_info)
-        key_block_compressed = f.read(key_block_size)
-        key_list = self._decode_key_block(key_block_compressed, key_block_info_list)
-        self._record_block_offset = f.tell()
-        f.close()
+        with open(self._fname, 'rb') as f:
+            f.seek(self._key_block_offset)
+            num_bytes = 8 * 5 if self._version >= 2.0 else 4 * 4
+            block = f.read(num_bytes)
+            if self._encrypt & 1: block = _salsa_decrypt(block, self._encrypted_key)
+            sf = BytesIO(block)
+            num_key_blocks = self._read_number(sf)
+            self._num_entries = self._read_number(sf)
+
+            if self._version >= 2.0:
+                key_block_info_decomp_size = self._read_number(sf)
+                key_block_info_size = self._read_number(sf)
+                key_block_size = self._read_number(sf)
+                f.read(4)
+            else:
+                key_block_info_size = self._read_number(sf)
+                key_block_size = self._read_number(sf)
+
+            key_block_info = f.read(key_block_info_size)
+            key_block_info_list = self._decode_key_block_info(key_block_info)
+            key_block_compressed = f.read(key_block_size)
+            key_list = self._decode_key_block(key_block_compressed, key_block_info_list)
+            self._record_block_offset = f.tell()
+        self._num_entries = len(key_list)
         return key_list
 
     def _read_keys_brutal(self):
-        f = open(self._fname, 'rb')
-        f.seek(self._key_block_offset)
-        num_bytes = 8 * 5 + 4 if self._version >= 2.0 else 4 * 4
-        key_block_type = b'\x02\x00\x00\x00' if self._version >= 2.0 else b'\x01\x00\x00\x00'
-        block = f.read(num_bytes)
-        key_block_info = f.read(8)
-        if self._version >= 2.0: assert key_block_info[:4] == b'\x02\x00\x00\x00'
-        while True:
-            fpos = f.tell()
-            t = f.read(1024)
-            index = t.find(key_block_type)
-            if index != -1: key_block_info += t[:index]; f.seek(fpos + index); break
-            else: key_block_info += t
-        key_block_info_list = self._decode_key_block_info(key_block_info)
-        key_block_size = sum(list(zip(*key_block_info_list))[0])
-        key_block_compressed = f.read(key_block_size)
-        key_list = self._decode_key_block(key_block_compressed, key_block_info_list)
-        self._record_block_offset = f.tell()
-        f.close()
+        with open(self._fname, 'rb') as f:
+            f.seek(self._key_block_offset)
+            num_bytes = 8 * 5 + 4 if self._version >= 2.0 else 4 * 4
+            key_block_type = b'\x02\x00\x00\x00' if self._version >= 2.0 else b'\x01\x00\x00\x00'
+            block = f.read(num_bytes)
+            key_block_info = f.read(8)
+            if self._version >= 2.0: assert key_block_info[:4] == b'\x02\x00\x00\x00'
+            while True:
+                fpos = f.tell()
+                t = f.read(1024)
+                index = t.find(key_block_type)
+                if index != -1: key_block_info += t[:index]; f.seek(fpos + index); break
+                else: key_block_info += t
+            key_block_info_list = self._decode_key_block_info(key_block_info)
+            key_block_size = sum(list(zip(*key_block_info_list))[0])
+            key_block_compressed = f.read(key_block_size)
+            key_list = self._decode_key_block(key_block_compressed, key_block_info_list)
+            self._record_block_offset = f.tell()
         self._num_entries = len(key_list)
         return key_list
 
@@ -352,74 +351,72 @@ class MDict(object):
 
     def _read_records_v3(self):
         record_index = self._read_record_index()
-        f = open(self._fname, 'rb')
-        f.seek(self._record_block_offset)
-        offset = 0; i = 0; size_counter = 0
-        num_record_blocks = self._read_int32(f)
-        num_bytes = self._read_number(f)
-        for j in range(num_record_blocks):
-            decompressed_size = self._read_int32(f)
-            compressed_size = self._read_int32(f)
-            if (compressed_size + 8, decompressed_size) != record_index[j]:
-                compressed_size = record_index[j][0] - 8
-                decompressed_size = record_index[j][1]
-                print('Skip (potentially) damaged record block')
-                f.read(compressed_size); continue
-            record_block = self._decode_block(f.read(compressed_size), decompressed_size)
-            while i < len(self._key_list):
-                record_start, key_text = self._key_list[i]
-                if record_start - offset >= len(record_block): break
-                record_end = self._key_list[i+1][0] if i < len(self._key_list)-1 else len(record_block) + offset
-                i += 1
-                yield key_text, self._treat_record_data(record_block[record_start-offset:record_end-offset])
-            offset += len(record_block); size_counter += compressed_size
+        with open(self._fname, 'rb') as f:
+            f.seek(self._record_block_offset)
+            offset = 0; i = 0; size_counter = 0
+            num_record_blocks = self._read_int32(f)
+            num_bytes = self._read_number(f)
+            for j in range(num_record_blocks):
+                decompressed_size = self._read_int32(f)
+                compressed_size = self._read_int32(f)
+                if (compressed_size + 8, decompressed_size) != record_index[j]:
+                    compressed_size = record_index[j][0] - 8
+                    decompressed_size = record_index[j][1]
+                    print('Skip (potentially) damaged record block')
+                    f.read(compressed_size); continue
+                record_block = self._decode_block(f.read(compressed_size), decompressed_size)
+                while i < len(self._key_list):
+                    record_start, key_text = self._key_list[i]
+                    if record_start - offset >= len(record_block): break
+                    record_end = self._key_list[i+1][0] if i < len(self._key_list)-1 else len(record_block) + offset
+                    i += 1
+                    yield key_text, self._treat_record_data(record_block[record_start-offset:record_end-offset])
+                offset += len(record_block); size_counter += compressed_size
 
     def _read_records_v1v2(self):
-        f = open(self._fname, 'rb')
-        f.seek(self._record_block_offset)
-        num_record_blocks = self._read_number(f)
-        num_entries = self._read_number(f)
-        assert(num_entries == self._num_entries)
-        record_block_info_size = self._read_number(f)
-        record_block_size = self._read_number(f)
-        record_block_info_list = []
-        size_counter = 0
-        for i in range(num_record_blocks):
-            compressed_size = self._read_number(f)
-            decompressed_size = self._read_number(f)
-            record_block_info_list += [(compressed_size, decompressed_size)]
-            size_counter += self._number_width * 2
-        assert(size_counter == record_block_info_size)
-        offset = 0; i = 0; size_counter = 0
-        for compressed_size, decompressed_size in record_block_info_list:
-            record_block = self._decode_block(f.read(compressed_size), decompressed_size)
-            while i < len(self._key_list):
-                record_start, key_text = self._key_list[i]
-                if record_start - offset >= len(record_block): break
-                record_end = self._key_list[i+1][0] if i < len(self._key_list)-1 else len(record_block) + offset
-                i += 1
-                yield key_text, self._treat_record_data(record_block[record_start-offset:record_end-offset])
-            offset += len(record_block); size_counter += compressed_size
-        assert(size_counter == record_block_size)
-        f.close()
+        with open(self._fname, 'rb') as f:
+            f.seek(self._record_block_offset)
+            num_record_blocks = self._read_number(f)
+            num_entries = self._read_number(f)
+            assert(num_entries == self._num_entries)
+            record_block_info_size = self._read_number(f)
+            record_block_size = self._read_number(f)
+            record_block_info_list = []
+            size_counter = 0
+            for i in range(num_record_blocks):
+                compressed_size = self._read_number(f)
+                decompressed_size = self._read_number(f)
+                record_block_info_list += [(compressed_size, decompressed_size)]
+                size_counter += self._number_width * 2
+            assert(size_counter == record_block_info_size)
+            offset = 0; i = 0; size_counter = 0
+            for compressed_size, decompressed_size in record_block_info_list:
+                record_block = self._decode_block(f.read(compressed_size), decompressed_size)
+                while i < len(self._key_list):
+                    record_start, key_text = self._key_list[i]
+                    if record_start - offset >= len(record_block): break
+                    record_end = self._key_list[i+1][0] if i < len(self._key_list)-1 else len(record_block) + offset
+                    i += 1
+                    yield key_text, self._treat_record_data(record_block[record_start-offset:record_end-offset])
+                offset += len(record_block); size_counter += compressed_size
+            assert(size_counter == record_block_size)
 
     def _read_record_index(self):
-        f = open(self._fname, 'rb')
-        f.seek(self._record_index_offset)
-        num_record_blocks = self._read_int32(f)
-        num_bytes = self._read_number(f)
-        record_index = []
-        for i in range(num_record_blocks):
-            decompressed_size = self._read_int32(f)
-            compressed_size = self._read_int32(f)
-            record_block = self._decode_block(f.read(compressed_size), decompressed_size)
-            if len(record_block) % 16 != 0: raise Exception('record index block has invalid size %d' % len(record_block))
-            j = 0
-            while j < len(record_block):
-                block_size, decompressed_size = unpack('>QQ', record_block[j:j+16])
-                record_index.append((block_size, decompressed_size))
-                j += 16
-        f.close()
+        with open(self._fname, 'rb') as f:
+            f.seek(self._record_index_offset)
+            num_record_blocks = self._read_int32(f)
+            num_bytes = self._read_number(f)
+            record_index = []
+            for i in range(num_record_blocks):
+                decompressed_size = self._read_int32(f)
+                compressed_size = self._read_int32(f)
+                record_block = self._decode_block(f.read(compressed_size), decompressed_size)
+                if len(record_block) % 16 != 0: raise Exception('record index block has invalid size %d' % len(record_block))
+                j = 0
+                while j < len(record_block):
+                    block_size, decompressed_size = unpack('>QQ', record_block[j:j+16])
+                    record_index.append((block_size, decompressed_size))
+                    j += 16
         return record_index
 
     def _treat_record_data(self, data):
@@ -437,12 +434,19 @@ class MDX(MDict):
     def _substitute_stylesheet(self, txt):
         txt_list = re.split(rb'`\d+`', txt)
         txt_tag = re.findall(rb'`\d+`', txt)
-        txt_styled = txt_list[0]
+        parts = [txt_list[0]]
         for j, p in enumerate(txt_list[1:]):
             style = self._stylesheet[txt_tag[j][1:-1]]
-            if p and p[-1] == '\n': txt_styled = txt_styled + style[0] + p.rstrip() + style[1] + '\r\n'
-            else: txt_styled = txt_styled + style[0] + p + style[1]
-        return txt_styled
+            if p and p[-1] == '\n':
+                parts.append(style[0])
+                parts.append(p.rstrip())
+                parts.append(style[1])
+                parts.append(b'\r\n')
+            else:
+                parts.append(style[0])
+                parts.append(p)
+                parts.append(style[1])
+        return b''.join(parts)
 
     def _treat_record_data(self, data):
         data = data.decode(self._encoding, errors='ignore').strip(u'\x00').encode('utf-8')
@@ -498,56 +502,115 @@ class CachedMDX:
         except Exception:
             pass
 
+    def _build_v3_index(self, m):
+        with open(self.fname, 'rb') as f:
+            f.seek(m._key_block_offset)
+            key_data_offset = None
+            record_block_offset = None
+            while True:
+                block_type = m._read_int32(f)
+                block_size = m._read_number(f)
+                block_offset = f.tell()
+                if block_type == 0x01000000:
+                    record_block_offset = block_offset
+                elif block_type == 0x03000000:
+                    key_data_offset = block_offset
+                f.seek(block_size, 1)
+                if f.read(4):
+                    f.seek(-4, 1)
+                else:
+                    break
+
+        if key_data_offset is not None:
+            with open(self.fname, 'rb') as f:
+                f.seek(key_data_offset)
+                num_kb = m._read_int32(f)
+                _total_size = m._read_number(f)
+                total_count = 0
+                for i in range(num_kb):
+                    decomp_size = m._read_int32(f)
+                    comp_size = m._read_int32(f)
+                    data_start = f.tell()
+                    kb_compressed = f.read(comp_size)
+                    kb_data = m._decode_block(kb_compressed, decomp_size)
+                    keys_in_block = m._split_key_block(kb_data)
+                    count = len(keys_in_block)
+                    total_count += count
+                    if keys_in_block:
+                        self._key_blocks_meta.append({
+                            "first": keys_in_block[0][1].decode('utf-8', errors='ignore'),
+                            "last": keys_in_block[-1][1].decode('utf-8', errors='ignore'),
+                            "count": count,
+                            "offset": data_start,
+                            "comp": comp_size,
+                            "decomp": decomp_size
+                        })
+                m._num_entries = total_count
+
+        if record_block_offset is not None:
+            with open(self.fname, 'rb') as f:
+                f.seek(record_block_offset)
+                num_rb = m._read_int32(f)
+                _total_size = m._read_number(f)
+                for i in range(num_rb):
+                    decomp_size = m._read_int32(f)
+                    comp_size = m._read_int32(f)
+                    data_start = f.tell()
+                    self._record_blocks_meta.append({
+                        "offset": data_start,
+                        "comp": comp_size,
+                        "decomp": decomp_size
+                    })
+                    f.seek(comp_size, 1)
+
     def _build_index(self):
         with self._file_lock:
             m = self.base_mdx
             if m._version >= 3:
-                self.base_mdx = MDX(self.fname)
-                self._key_blocks_meta = [{"fallback": True}]
+                self._build_v3_index(m)
                 return
 
-            f = open(self.fname, 'rb')
-            f.seek(m._key_block_offset)
-            num_bytes = 8 * 5 if m._version >= 2.0 else 4 * 4
-            block = f.read(num_bytes)
-            if m._encrypt & 1:
-                block = _salsa_decrypt(block, m._encrypted_key)
-            sf = BytesIO(block)
-            m._read_number(sf)
-            m._num_entries = m._read_number(sf)
-
-            if m._version >= 2.0:
+            with open(self.fname, 'rb') as f:
+                f.seek(m._key_block_offset)
+                num_bytes = 8 * 5 if m._version >= 2.0 else 4 * 4
+                block = f.read(num_bytes)
+                if m._encrypt & 1:
+                    block = _salsa_decrypt(block, m._encrypted_key)
+                sf = BytesIO(block)
                 m._read_number(sf)
-                kb_info_size = m._read_number(sf)
-                kb_size = m._read_number(sf)
-                f.read(4)
-            else:
-                kb_info_size = m._read_number(sf)
-                kb_size = m._read_number(sf)
+                m._num_entries = m._read_number(sf)
 
-            kb_info = f.read(kb_info_size)
-            kb_info_list = m._decode_key_block_info(kb_info)
-            kb_data_start = f.tell()
-            kb_compressed = f.read(kb_size)
-            self._record_block_offset = f.tell()
+                if m._version >= 2.0:
+                    m._read_number(sf)
+                    kb_info_size = m._read_number(sf)
+                    kb_size = m._read_number(sf)
+                    f.read(4)
+                else:
+                    kb_info_size = m._read_number(sf)
+                    kb_size = m._read_number(sf)
 
-            num_rb = m._read_number(f)
-            m._read_number(f)
-            m._read_number(f)
-            m._read_number(f)
+                kb_info = f.read(kb_info_size)
+                kb_info_list = m._decode_key_block_info(kb_info)
+                kb_data_start = f.tell()
+                kb_compressed = f.read(kb_size)
+                self._record_block_offset = f.tell()
 
-            rec_info_list = []
-            for _ in range(num_rb):
-                c = m._read_number(f)
-                d = m._read_number(f)
-                rec_info_list.append((c, d))
+                num_rb = m._read_number(f)
+                m._read_number(f)
+                m._read_number(f)
+                m._read_number(f)
 
-            rec_data_start = f.tell()
-            curr_rec_offset = rec_data_start
-            for c, d in rec_info_list:
-                self._record_blocks_meta.append({"offset": curr_rec_offset, "comp": c, "decomp": d})
-                curr_rec_offset += c
-            f.close()
+                rec_info_list = []
+                for _ in range(num_rb):
+                    c = m._read_number(f)
+                    d = m._read_number(f)
+                    rec_info_list.append((c, d))
+
+                rec_data_start = f.tell()
+                curr_rec_offset = rec_data_start
+                for c, d in rec_info_list:
+                    self._record_blocks_meta.append({"offset": curr_rec_offset, "comp": c, "decomp": d})
+                    curr_rec_offset += c
 
             local_offset = 0
             for comp_size, decomp_size in kb_info_list:
@@ -576,10 +639,9 @@ class CachedMDX:
             return self._key_cache[meta_idx]
         with self._file_lock:
             meta = self._key_blocks_meta[meta_idx]
-            f = open(self.fname, 'rb')
-            f.seek(meta["offset"])
-            kb_data = self.base_mdx._decode_block(f.read(meta["comp"]), meta["decomp"])
-            f.close()
+            with open(self.fname, 'rb') as f:
+                f.seek(meta["offset"])
+                kb_data = self.base_mdx._decode_block(f.read(meta["comp"]), meta["decomp"])
             keys = self.base_mdx._split_key_block(kb_data)
             self._key_cache[meta_idx] = keys
             if len(self._key_cache) > self.MAX_KEY_CACHE:
@@ -592,24 +654,15 @@ class CachedMDX:
             return self._record_cache[rec_idx]
         with self._file_lock:
             meta = self._record_blocks_meta[rec_idx]
-            f = open(self.fname, 'rb')
-            f.seek(meta["offset"])
-            block_data = self.base_mdx._decode_block(f.read(meta["comp"]), meta["decomp"])
-            f.close()
+            with open(self.fname, 'rb') as f:
+                f.seek(meta["offset"])
+                block_data = self.base_mdx._decode_block(f.read(meta["comp"]), meta["decomp"])
             self._record_cache[rec_idx] = block_data
             if len(self._record_cache) > self.MAX_RECORD_CACHE:
                 self._record_cache.popitem(last=False)
             return block_data
 
     def search_prefix(self, prefix, max_results=100):
-        if self._key_blocks_meta and self._key_blocks_meta[0].get("fallback"):
-            keys = list(self.base_mdx.keys())
-            start = bisect_left(keys, prefix.encode(self.encoding))
-            return [(keys[i].decode('utf-8', errors='ignore'), i)
-                    for i in range(start, len(keys))
-                    if keys[i].decode('utf-8', errors='ignore').startswith(prefix)
-                    ][:max_results]
-
         results = []
         prefix_lower = prefix.lower()
         for idx, meta in enumerate(self._key_blocks_meta):
@@ -620,7 +673,6 @@ class CachedMDX:
             keys_block = self._get_key_block(idx)
             base_abs_idx = sum(m["count"] for m in self._key_blocks_meta[:idx])
             for local_idx, (rec_offset, key_bytes) in enumerate(keys_block):
-                # 【修复】_split_key_block 输出的是 utf-8 bytes，必须用 utf-8 解码
                 key_str = key_bytes.decode('utf-8', errors='ignore')
                 if key_str.lower().startswith(prefix_lower):
                     results.append((key_str, base_abs_idx + local_idx))
@@ -632,8 +684,6 @@ class CachedMDX:
 
 
     def get_by_index(self, abs_idx):
-        if self._key_blocks_meta and self._key_blocks_meta[0].get("fallback"):
-            return next(itertools.islice(self.base_mdx.items(), abs_idx, abs_idx + 1), (None, None))[1]
         with self._file_lock:
             accumulated = 0
             for i, meta in enumerate(self._key_blocks_meta):
@@ -705,48 +755,47 @@ class CachedMDD:
 
     def _build_path_index(self):
         m = self.base_mdd
-        f = open(self.fname, 'rb')
-        f.seek(m._key_block_offset)
-        num_bytes = 8 * 5 if m._version >= 2.0 else 4 * 4
-        block = f.read(num_bytes)
-        if m._encrypt & 1:
-            block = _salsa_decrypt(block, m._encrypted_key)
-        sf = BytesIO(block)
-        m._read_number(sf)
-        m._read_number(sf)
-
-        if m._version >= 2.0:
+        with open(self.fname, 'rb') as f:
+            f.seek(m._key_block_offset)
+            num_bytes = 8 * 5 if m._version >= 2.0 else 4 * 4
+            block = f.read(num_bytes)
+            if m._encrypt & 1:
+                block = _salsa_decrypt(block, m._encrypted_key)
+            sf = BytesIO(block)
             m._read_number(sf)
-            kb_info_size = m._read_number(sf)
-            kb_size = m._read_number(sf)
-            f.read(4)
-        else:
-            kb_info_size = m._read_number(sf)
-            kb_size = m._read_number(sf)
+            m._read_number(sf)
 
-        kb_info = f.read(kb_info_size)
-        kb_info_list = m._decode_key_block_info(kb_info)
+            if m._version >= 2.0:
+                m._read_number(sf)
+                kb_info_size = m._read_number(sf)
+                kb_size = m._read_number(sf)
+                f.read(4)
+            else:
+                kb_info_size = m._read_number(sf)
+                kb_size = m._read_number(sf)
 
-        kb_data_start = f.tell()
-        kb_compressed = f.read(kb_size)
+            kb_info = f.read(kb_info_size)
+            kb_info_list = m._decode_key_block_info(kb_info)
 
-        num_rb = m._read_number(f)
-        m._read_number(f)
-        m._read_number(f)
-        m._read_number(f)
+            kb_data_start = f.tell()
+            kb_compressed = f.read(kb_size)
 
-        rec_info_list = []
-        for _ in range(num_rb):
-            c = m._read_number(f)
-            d = m._read_number(f)
-            rec_info_list.append((c, d))
-        rec_data_start = f.tell()
+            num_rb = m._read_number(f)
+            m._read_number(f)
+            m._read_number(f)
+            m._read_number(f)
 
-        curr_rec_offset = rec_data_start
-        for c, d in rec_info_list:
-            self._record_blocks_meta.append({"offset": curr_rec_offset, "comp": c, "decomp": d})
-            curr_rec_offset += c
-        f.close()
+            rec_info_list = []
+            for _ in range(num_rb):
+                c = m._read_number(f)
+                d = m._read_number(f)
+                rec_info_list.append((c, d))
+            rec_data_start = f.tell()
+
+            curr_rec_offset = rec_data_start
+            for c, d in rec_info_list:
+                self._record_blocks_meta.append({"offset": curr_rec_offset, "comp": c, "decomp": d})
+                curr_rec_offset += c
 
         local_offset = 0
         for comp, decomp in kb_info_list:
@@ -783,12 +832,11 @@ class CachedMDD:
 
             if target_rb_idx not in self._record_cache:
                 meta = self._record_blocks_meta[target_rb_idx]
-                f = open(self.fname, 'rb')
-                f.seek(meta["offset"])
-                self._record_cache[target_rb_idx] = self.base_mdd._decode_block(
-                    f.read(meta["comp"]), meta["decomp"]
-                )
-                f.close()
+                with open(self.fname, 'rb') as f:
+                    f.seek(meta["offset"])
+                    self._record_cache[target_rb_idx] = self.base_mdd._decode_block(
+                        f.read(meta["comp"]), meta["decomp"]
+                    )
                 if len(self._record_cache) > self.MAX_CACHE:
                     self._record_cache.popitem(last=False)
             else:
