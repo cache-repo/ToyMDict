@@ -151,7 +151,13 @@ class WindowApi:
             self._current_results = filtered_results
             self.window.evaluate_js(f"updateResults({json.dumps(filtered_results, ensure_ascii=False)})")
             if filtered_results:
-                self.show_entry(0)
+                for idx, result in enumerate(filtered_results):
+                    res_key = result["key"]
+                    if len(res_key) > len(keyword):
+                        break
+                    elif len(res_key) == len(keyword) and res_key == keyword:
+                        self.show_entry(idx)
+                        break
         threading.Thread(target=task, daemon=True).start()
 
     def show_entry(self, index: int):
