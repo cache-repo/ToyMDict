@@ -72,7 +72,7 @@ class DictionaryManager:
                         "dict_name": wrapper.name
                     })
         results = list(merged_results.values())
-        results.sort(key=lambda x: len(x["key"]))
+        results.sort(key=lambda x: (0 if x["key"] == keyword else 1, len(x["key"])))
         return results
 
     def get_content(self, dict_id: str, key: str, idx: int = None) -> tuple:
