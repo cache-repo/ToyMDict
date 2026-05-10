@@ -11,7 +11,7 @@
 3. https://github.com/KnIfER/PlainDictionaryAPP
 
 特点：
-1. 支持异体字关联
+1. 支持异体字关联（可自行修改json文件）
 2. 强制先分组，后查询
 
 
